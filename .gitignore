@@ -1,13 +1,15 @@
-# macOS
-.DS_Store
-
-# VS Code
-.vscode/
+# Python virtual environment
+venv/
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Virtual environments
-venv/
-.env
+# macOS files
+.DS_Store
+
+# VS Code settings
+.vscode/
+
+# Generated log file
+aggregated_logs.txt
