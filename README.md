@@ -1,29 +1,56 @@
-# Distributed Logging System — Part 1: Redis Setup
+# Distributed Logging System using Redis
 
-A DevOps project configuring Redis as a centralized message queue, laying the foundation for a multi-part distributed logging system.
+A DevOps project demonstrating a producer-consumer distributed logging architecture using Redis as a centralized message queue on AWS EC2.
 
 Built as part of the **DevOps + SRE Daily Challenge Series**.
+
+![Architecture Diagram](architecture.png)
 
 ---
 
 ## Overview
 
-Part 1 covers installing and configuring Redis on AWS EC2, securing it with password authentication, exposing it for external connections, and validating queue operations both locally and remotely.
+This project demonstrates a simple distributed logging system where log producers push messages into a Redis queue and a consumer continuously processes and persists them.
+
+The system consists of:
+
+- A log producer that generates and queues log messages
+- Redis acting as a centralized message queue
+- A log consumer that processes incoming logs in real time
+- Persistent log storage in `aggregated_logs.txt`
 
 ---
 
 ## Architecture
 
 ```
-MacBook
-   ↓
-AWS Security Group
-   ↓
-EC2 Instance (Ubuntu)
-   ↓
-Redis Server
-   ↓
-logs_queue
+Log Producer          MacBook / EC2
+(log_producer.py)
+        │
+        ▼
+Redis Queue           AWS EC2 (Ubuntu)
+(logs_queue)
+        │
+        ▼
+Log Consumer
+(log_aggregator.py)
+        │
+        ▼
+aggregated_logs.txt
+```
+
+---
+
+## Project Structure
+
+```
+redis-distributed-logging/
+├── log_producer.py
+├── log_aggregator.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+└── screenshots/
 ```
 
 ---
@@ -35,7 +62,7 @@ logs_queue
 | Cloud Provider | AWS |
 | Compute | EC2 (Ubuntu) |
 | Message Queue | Redis |
-| Client Tool | redis-cli |
+| Client Tool | redis-cli, Python |
 
 ---
 
@@ -50,7 +77,7 @@ redis-server --version
 
 ### 2. Configure Redis
 
-Edit `/etc/redis/redis.conf` and update the following:
+Edit `/etc/redis/redis.conf`:
 
 ```
 # Enable password authentication
@@ -72,48 +99,77 @@ sudo systemctl status redis-server
 ```bash
 redis-cli
 AUTH Redis@123
-PING         # Expected: PONG
+PING    # Expected: PONG
 ```
 
-### 4. Create the Log Queue
+### 4. Test Remote Connectivity
 
-Redis Lists are used as a simple message queue:
-
-```bash
-LPUSH logs_queue "Application Started"
-LPUSH logs_queue "User Login Successful"
-LPUSH logs_queue "Database Connected"
-```
-
-Validate the queue:
-
-```bash
-LLEN logs_queue       # Check queue length
-LRANGE logs_queue 0 -1  # View all entries
-```
-
-### 5. Test Remote Connectivity
-
-From a local MacBook:
+From a local machine:
 
 ```bash
 redis-cli -h <EC2_PUBLIC_IP> -p 6379
 AUTH Redis@123
-PING         # Expected: PONG
+PING    # Expected: PONG
 ```
 
 > Make sure port `6379` is open in your AWS Security Group inbound rules.
 
 ---
 
+## Log Producer
+
+The producer script connects to Redis and pushes log messages into the queue.
+
+```bash
+python log_producer.py "INFO: Application Started"
+```
+
+Internally it:
+
+- Connects to Redis and authenticates
+- Pushes the log message into `logs_queue` using `LPUSH`
+
+---
+
+## Log Aggregator
+
+The consumer continuously listens for new messages and writes them to a log file.
+
+```bash
+python log_aggregator.py
+```
+
+Responsibilities:
+
+- Wait for new messages using `BRPOP` (blocking pop)
+- Remove processed logs from the queue atomically
+- Append each log entry to `aggregated_logs.txt`
+
+---
+
+## Distributed Logging Workflow
+
+```
+1. Producer generates a log message
+2. Message pushed into Redis via LPUSH
+3. Redis stores it in logs_queue
+4. Consumer blocks on BRPOP, waiting for new entries
+5. Consumer retrieves and removes the message
+6. Message appended to aggregated_logs.txt
+```
+
+---
+
 ## Key Learnings
 
 - Redis installation and service management on EC2
-- Difference between binding to `127.0.0.1` vs `0.0.0.0`
 - Password-based authentication using `requirepass`
-- Using Redis Lists (`LPUSH`, `LLEN`, `LRANGE`) as a message queue
+- Difference between binding to `127.0.0.1` vs `0.0.0.0`
 - AWS Security Group configuration for external access
-- Foundation concepts behind distributed logging systems
+- Redis Lists as message queues (`LPUSH`, `BRPOP`, `LLEN`, `LRANGE`)
+- Producer-consumer architecture and decoupled system design
+- Log aggregation and persistent storage concepts
+- Remote connectivity testing using `redis-cli`
 
 ---
 
@@ -126,16 +182,12 @@ PING         # Expected: PONG
 | `redis-auth-ping.png` | Authentication and PING test |
 | `queue-length.png` | Queue length after LPUSH |
 | `queue-content.png` | Queue contents via LRANGE |
-
----
-
-## What's Next
-
-In **Part 2**, the Redis queue will be integrated with log producers and consumers to simulate a full centralized logging workflow.
+| `producer-output.png` | Producer sending log messages |
+| `consumer-output.png` | Consumer processing log messages |
+| `aggregated-logs.png` | Final aggregated log file |
 
 ---
 
 ## Author
 
 **Manik Singhal**
-DevOps + SRE Daily Challenge Series
